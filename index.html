@@ -1,0 +1,122 @@
+
+<!DOCTYPE html>
+<html lang="pt-PT" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watton EIP - Energy Intelligent Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        watton: {
+                            dark: '#2E5A27',
+                            lime: '#8BC53F',
+                            black: '#000000',
+                            gray: '#121212'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            background-color: #000000;
+            color: #e5e5e5;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Custom scrollbar for dark mode */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #121212; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2E5A27; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #8BC53F; 
+        }
+
+        /* --- RELATÓRIO PDF STYLES (STRATEGY APPLIED) --- */
+        .watton-report-container {
+            width: 210mm; 
+            margin: 40px auto;
+            background-color: white;
+            color: #1f2937;
+        }
+
+        @media print {
+            @page { margin: 0; size: A4; }
+            html, body {
+                height: 100%;
+                margin: 0 !important;
+                padding: 0 !important;
+                background-color: white !important;
+                color: black !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            
+            .no-print { display: none !important; }
+
+            /* --- CORREÇÃO DE LARGURA E CORTE --- */
+            .watton-report-container, table, tbody, tr, td, th {
+                width: 100% !important; 
+                max-width: 100% !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                /*box-sizing: border-box !important;*/ /* Apply explicitly via Tailwind or inline style where needed */
+            }
+
+            /* Evita quebras indesejadas */
+            h1, h2, h3, h4, .group {
+                page-break-after: avoid !important;
+                page-break-inside: avoid !important;
+            }
+            
+            tr, td, img, .avoid-break {
+                page-break-inside: avoid !important;
+            }
+
+            .html2pdf__page-break {
+                page-break-before: always;
+                height: 0;
+                margin: 0;
+                display: block; /* Ensure it takes effect */
+            }
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "firebase/": "https://esm.sh/firebase@^12.6.0/",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.10.1",
+    "@google/genai": "https://esm.sh/@google/genai@^1.32.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.1/",
+    "react/": "https://esm.sh/react@^19.2.1/",
+    "react": "https://esm.sh/react@^19.2.1",
+    "recharts": "https://esm.sh/recharts@^2.12.0",
+    "xlsx": "https://esm.sh/xlsx@0.18.5"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>

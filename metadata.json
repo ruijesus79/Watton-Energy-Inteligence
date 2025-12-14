@@ -1,0 +1,7 @@
+{
+  "name": "Watton EIP",
+  "description": "Energy Intelligent Platform for electricity bill analysis, simulation, and vulnerability reporting.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
