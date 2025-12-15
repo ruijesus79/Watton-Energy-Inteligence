@@ -8,22 +8,21 @@ const ANALYSIS_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     diagnosisPriceText: { type: Type.STRING, description: "Diagnóstico Financeiro: Comparação de preços unitários e impacto na Ponta." }, 
-    diagnosisOppText: { type: Type.STRING, description: "Análise de Risco: Exposição ao mercado spot vs Segurança do Hedging Watton." },
-    strategyText: { type: Type.STRING, description: "Estratégia Watton: Explicação técnica do bloqueio de preço e benefícios." },
+    diagnosisOppText: { type: Type.STRING, description: "Análise de Risco: Exposição ao mercado spot vs Segurança da Proposta." },
+    strategyText: { type: Type.STRING, description: "Estratégia Watton: Explicação técnica da solução (Fixo ou Hedging)." },
     efficiencyStrategy: { type: Type.STRING, description: "Otimização Operacional: Sugestões práticas para reduzir consumo na Ponta." },
     insightText: { type: Type.STRING, description: "Conclusão Executiva: O 'Elevator Pitch' final baseado na poupança anual." },
     vulnerabilityScore: { type: Type.STRING }
   }
 };
 
-export const generateExpertAnalysis = async (client: ClientData) => {
+export const generateExpertAnalysis = async (client: ClientData, strategyType: 'HEDGING' | 'FIXED' = 'FIXED') => {
   try {
     const monthlyStats = client.monthlyStats || [];
     const totalKwh = monthlyStats.reduce((acc, s) => acc + s.kwh, 0) || 1;
     
     // Análise Granular por Período
     const ponta = monthlyStats.find(s => s.period.toLowerCase().includes('ponta'));
-    const vazio = monthlyStats.find(s => s.period.toLowerCase().includes('vazio'));
     
     const pontaKwh = ponta?.kwh || 0;
     const pontaPriceDiff = (ponta?.currentUnit || 0) - (ponta?.wattonUnit || 0);
@@ -31,6 +30,7 @@ export const generateExpertAnalysis = async (client: ClientData) => {
     
     const annualSavings = client.annualSavingsEur || 0;
     const savingsPct = client.annualSavingsPercent || 0;
+    const strategyName = client.appliedStrategyName || 'Proposta Personalizada';
 
     // Cálculo Algorítmico do Score (Quanto maior a poupança, mais vulnerável estava o cliente)
     let score = 5;
@@ -46,7 +46,7 @@ export const generateExpertAnalysis = async (client: ClientData) => {
       - Diferencial de Preço na Ponta: O cliente paga ${(ponta?.currentUnit || 0).toFixed(4)}€/kWh. A Watton propõe ${(ponta?.wattonUnit || 0).toFixed(4)}€/kWh.
       - Poupança só na Ponta: ~${pontaSavings.toFixed(0)}€.
       - Poupança Anual Total: ${annualSavings.toLocaleString('pt-PT', {style: 'currency', currency: 'EUR'})} (${savingsPct.toFixed(1)}%).
-      - Estratégia Proposta: ${client.appliedStrategyName || 'Hedging Personalizado'}.
+      - Estratégia Proposta SELECIONADA: "${strategyName}" (TIPO: ${strategyType}).
     `;
 
     const prompt = `
@@ -55,26 +55,29 @@ export const generateExpertAnalysis = async (client: ClientData) => {
 
       Escreve em Português de Portugal (PT-PT), tom corporativo, direto e persuasivo.
 
+      REGRAS CRÍTICAS DE ESTRATÉGIA:
+      1. Se o TIPO for 'FIXED', NUNCA fales em "Indexado gerido", "Hedging", "Watton Móvil" ou "Híbrido". Fala em "Estabilidade Total", "Orçamento Fechado" e "Preço Fixo Garantido". Usa estritamente o nome "${strategyName}".
+      2. Se o TIPO for 'HEDGING', explica o benefício de bloquear o preço nas horas caras e aproveitar o mercado nas horas baratas.
+      3. NÃO ALUCINES Nomes de Produtos. Usa apenas "${strategyName}".
+
+      SECÇÕES A GERAR:
+
       1. DIAGNÓSTICO PREÇO (diagnosisPriceText):
-         - Analisa o "Spread" excessivo que o cliente paga atualmente, especialmente nas horas de Ponta.
-         - Menciona explicitamente que a tarifa atual está desajustada face aos fundamentais do mercado grossista.
-         - Se o consumo em Ponta for alto, alerta para a ineficiência financeira.
+         - Analisa o "Spread" excessivo que o cliente paga atualmente.
+         - Se poupança for negativa (prejuízo), explica que o cliente já tem um bom contrato mas a Watton oferece melhor serviço. Se positiva, destrói o preço atual.
 
       2. ANÁLISE DE RISCO (diagnosisOppText):
-         - Explica o risco de manter um contrato indexado sem "teto" ou um contrato fixo com "prémio de risco" alto demais.
-         - Introduz a Watton como parceiro de confiança que elimina prémios ocultos.
+         - Explica o risco de manter o contrato atual versus a segurança da solução Watton.
 
       3. ESTRATÉGIA IMPLEMENTADA (strategyText):
-         - Explica a estratégia de Hedging da Watton: Bloqueio de preço nas horas de volatilidade (Ponta/Cheias) e aproveitamento de oportunidades no Vazio.
-         - Reforça a previsibilidade orçamental.
+         - Explica a solução "${strategyName}" baseada no TIPO ${strategyType}.
+         - Sê técnico sobre como este produto específico resolve o problema do cliente.
 
       4. OTIMIZAÇÃO (efficiencyStrategy):
-         - Dá 2 exemplos práticos para reduzir os ${pontaKwh} kWh de ponta (ex: desvio de produção, automação de frio/calor).
-         - Sê técnico mas acessível.
+         - Dá 2 exemplos práticos para reduzir consumo.
 
       5. INSIGHT FINAL (insightText):
-         - Uma frase de fecho poderosa. Ex: "Ao não agir, a empresa desperdiça ${annualSavings.toFixed(0)}€ anuais em custos de ineficiência contratual."
-         - Reforça que a Watton defende os interesses do cliente, não das elétricas.
+         - Uma frase de fecho poderosa baseada no valor anual de ${annualSavings.toFixed(0)}€.
     `;
 
     const response = await ai.models.generateContent({
@@ -83,7 +86,7 @@ export const generateExpertAnalysis = async (client: ClientData) => {
       config: {
         responseMimeType: "application/json",
         responseSchema: ANALYSIS_SCHEMA,
-        temperature: 0.3
+        temperature: 0.2
       }
     });
 
@@ -101,10 +104,10 @@ export const generateExpertAnalysis = async (client: ClientData) => {
     // Fallback Inteligente
     return {
         diagnosisPriceText: "Identificámos um spread excessivo no preço de energia ativa, especificamente no período de Ponta, onde a tarifa atual penaliza o perfil de consumo da empresa.",
-        diagnosisOppText: "A estrutura atual expõe a tesouraria à volatilidade diária do OMIP. A ausência de um mecanismo de fixação (Hedging) representa um risco financeiro elevado.",
-        strategyText: "Implementação de modelo Híbrido/Hedging: Fixação de custo nas horas críticas para eliminar risco, mantendo indexação nas horas de vazio para capturar baixas de mercado.",
-        efficiencyStrategy: "Sugerimos análise técnica para deslocação de cargas térmicas ou processos industriais intensivos para o período 'Vazio', reduzindo o custo médio ponderado.",
-        insightText: `A inércia contratual está a custar ${client.annualSavingsEur?.toFixed(0)}€ por ano. A Proposta Watton corrige imediatamente esta ineficiência de mercado.`,
+        diagnosisOppText: "A estrutura atual expõe a tesouraria à volatilidade. A proposta Watton mitiga este risco.",
+        strategyText: `Implementação da estratégia ${client.appliedStrategyName || 'Watton Energy'} para garantir competitividade e redução de custos operacionais.`,
+        efficiencyStrategy: "Sugerimos análise técnica para deslocação de cargas térmicas ou processos industriais intensivos para o período 'Vazio'.",
+        insightText: `A inércia contratual está a custar ${client.annualSavingsEur?.toFixed(0)}€ por ano. A Proposta Watton corrige imediatamente esta ineficiência.`,
         vulnerabilityScore: client.annualSavingsPercent && client.annualSavingsPercent > 20 ? "8" : "6"
     };
   }

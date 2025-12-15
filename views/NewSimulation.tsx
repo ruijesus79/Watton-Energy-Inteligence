@@ -70,7 +70,6 @@ export const NewSimulation: React.FC = () => {
           setInvoiceFile(client.invoiceFile);
           
           // RECONSTRUCT CONSUMPTION WITH OVERRIDES
-          // Check if we have overrides saved in simulationConfig (Ideal) or infer from monthlyStats (Fallback)
           const overrides = (client.simulationConfig as any)?.priceOverrides || {};
           
           const safeConsumption = client.consumptionData || [];
@@ -106,16 +105,22 @@ export const NewSimulation: React.FC = () => {
       const id = e.target.value;
       setSelectedStrategyId(id);
       const strat = MASTER_STRATEGIES.find(s => s.id === id);
-      if (strat) setActiveStrategy(strat);
+      if (strat) {
+          setActiveStrategy(strat);
+      }
   };
 
   const handleSpreadChange = (val: number) => {
       setPowerSpread(val);
-      setManualPowerPrice(undefined); 
+      // Ao mudar o spread, se não houver manual override, o preço final atualiza-se sozinho
   };
 
   const handleFinalPowerPriceChange = (val: number) => {
       setManualPowerPrice(val);
+  };
+  
+  const resetPowerPrice = () => {
+      setManualPowerPrice(undefined);
   };
 
   // --- RECALCULATE LOGIC ---
@@ -138,6 +143,7 @@ export const NewSimulation: React.FC = () => {
           }
       });
 
+      // LÓGICA DE PREÇO DE POTÊNCIA:
       const calculatedPowerPrice = manualPowerPrice !== undefined 
           ? manualPowerPrice 
           : (activeStrategy.proposalPowerPriceDaily + powerSpread);
@@ -156,6 +162,7 @@ export const NewSimulation: React.FC = () => {
       invoiceData.companyName, 
       invoiceData.nif, 
       invoiceData.tensionLevel, 
+      invoiceData.cycleType, 
       extendedConsumption, 
       activeStrategy, 
       manualMargin, 
@@ -295,11 +302,14 @@ export const NewSimulation: React.FC = () => {
     setAnalysisStep("A analisar perfis de consumo e fator de carga...");
     
     await new Promise(r => setTimeout(r, 800));
-    setAnalysisStep("A analisar fatura e estratégia Watton..."); // TEXTO ALTERADO
+    setAnalysisStep(`A analisar estratégia: ${activeStrategy.name}...`);
     
     const clientForAnalysis = buildClientPayload();
+    // Inject explicitly the strategy name and type to the AI service context
+    clientForAnalysis.appliedStrategyName = activeStrategy.name;
+
     try {
-        const analysis = await generateExpertAnalysis(clientForAnalysis);
+        const analysis = await generateExpertAnalysis(clientForAnalysis, activeStrategy.type);
         
         setAnalysisStep("A gerar estratégia de otimização...");
         await new Promise(r => setTimeout(r, 600));
@@ -445,9 +455,9 @@ export const NewSimulation: React.FC = () => {
                              </select>
                          </div>
                          <div className="bg-black p-2 rounded border border-gray-700">
-                             <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Produto</label>
-                             <select className="w-full bg-transparent text-white font-bold text-sm outline-none" value={invoiceData.productType} onChange={e => setInvoiceData({...invoiceData, productType: e.target.value as any})}>
-                                 {PRODUCT_TYPES.map(t => <option key={t} value={t} className="bg-gray-900">{t}</option>)}
+                             <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Ciclo Horário</label>
+                             <select className="w-full bg-transparent text-white font-bold text-sm outline-none" value={invoiceData.cycleType} onChange={e => setInvoiceData({...invoiceData, cycleType: e.target.value as any})}>
+                                 {CYCLES.map(c => <option key={c} value={c} className="bg-gray-900">{c}</option>)}
                              </select>
                          </div>
                     </div>
@@ -514,12 +524,18 @@ export const NewSimulation: React.FC = () => {
                             <div className="mt-2 text-right border-t border-gray-700 pt-2 flex justify-between items-center">
                                 <span className="text-[10px] uppercase font-bold text-gray-500">Final Proposta</span>
                                 <div className="flex items-center justify-end gap-2">
+                                    {manualPowerPrice !== undefined && (
+                                        <button onClick={resetPowerPrice} className="text-[9px] text-red-400 hover:text-red-300 underline mr-2">
+                                            Reset (Auto)
+                                        </button>
+                                    )}
                                     <input 
                                         type="number"
                                         step="0.0001"
                                         value={manualPowerPrice !== undefined ? manualPowerPrice : (activeStrategy.proposalPowerPriceDaily + powerSpread)}
                                         onChange={(e) => handleFinalPowerPriceChange(parseFloat(e.target.value))}
-                                        className="bg-transparent text-lg font-mono font-bold text-blue-400 outline-none w-28 text-right border-b border-transparent hover:border-blue-500 focus:border-blue-500 focus:text-blue-300 transition-colors"
+                                        className={`bg-transparent text-lg font-mono font-bold outline-none w-28 text-right border-b border-transparent hover:border-blue-500 focus:border-blue-500 transition-colors ${manualPowerPrice !== undefined ? 'text-yellow-400' : 'text-blue-400'}`}
+                                        title={manualPowerPrice !== undefined ? "Valor manual definido" : "Valor calculado automaticamente"}
                                     />
                                     <span className="text-xs text-blue-500 font-bold">€/dia</span>
                                 </div>
