@@ -30,7 +30,7 @@ export const NewSimulation: React.FC = () => {
   const [activeStrategy, setActiveStrategy] = useState<WattonStrategy>(MASTER_STRATEGIES[0]);
   const [manualMargin, setManualMargin] = useState<number | undefined>(undefined);
   
-  // POWER PRICE LOGIC (Base + Spread OR Manual Override)
+  // POWER PRICE LOGIC
   const [powerSpread, setPowerSpread] = useState<number>(0.2500);
   const [manualPowerPrice, setManualPowerPrice] = useState<number | undefined>(undefined);
 
@@ -56,7 +56,6 @@ export const NewSimulation: React.FC = () => {
   const [reportConfig, setReportConfig] = useState<ClientData['reportData']>({});
   const [savedVulnerabilityScore, setSavedVulnerabilityScore] = useState<string | null>(null);
 
-  // Initial Load
   useEffect(() => {
     const id = searchParams.get('id');
     const viewMode = searchParams.get('view');
@@ -69,7 +68,6 @@ export const NewSimulation: React.FC = () => {
           setInvoiceData(client);
           setInvoiceFile(client.invoiceFile);
           
-          // RECONSTRUCT CONSUMPTION WITH OVERRIDES
           const overrides = (client.simulationConfig as any)?.priceOverrides || {};
           
           const safeConsumption = client.consumptionData || [];
@@ -110,20 +108,10 @@ export const NewSimulation: React.FC = () => {
       }
   };
 
-  const handleSpreadChange = (val: number) => {
-      setPowerSpread(val);
-      // Ao mudar o spread, se não houver manual override, o preço final atualiza-se sozinho
-  };
+  const handleSpreadChange = (val: number) => setPowerSpread(val);
+  const handleFinalPowerPriceChange = (val: number) => setManualPowerPrice(val);
+  const resetPowerPrice = () => setManualPowerPrice(undefined);
 
-  const handleFinalPowerPriceChange = (val: number) => {
-      setManualPowerPrice(val);
-  };
-  
-  const resetPowerPrice = () => {
-      setManualPowerPrice(undefined);
-  };
-
-  // --- RECALCULATE LOGIC ---
   useEffect(() => {
     if (activeStrategy && extendedConsumption.length > 0) {
       const syncInvoice: InvoiceData = { 
@@ -143,7 +131,6 @@ export const NewSimulation: React.FC = () => {
           }
       });
 
-      // LÓGICA DE PREÇO DE POTÊNCIA:
       const calculatedPowerPrice = manualPowerPrice !== undefined 
           ? manualPowerPrice 
           : (activeStrategy.proposalPowerPriceDaily + powerSpread);
@@ -239,14 +226,12 @@ export const NewSimulation: React.FC = () => {
     
     const finalPower = manualPowerPrice !== undefined ? manualPowerPrice : (activeStrategy.proposalPowerPriceDaily + powerSpread);
     
-    // Auto Calculate Score based on Savings
     let calcScore = "5";
     if (result.annualSavingsPercent > 30) calcScore = "10";
     else if (result.annualSavingsPercent > 20) calcScore = "8";
     else if (result.annualSavingsPercent > 10) calcScore = "7";
     else if (result.annualSavingsPercent > 5) calcScore = "6";
 
-    // Extract Overrides to Save
     const overrides: Record<string, number> = {};
     extendedConsumption.forEach(c => {
         if (c.manualWattonPrice !== undefined && !isNaN(c.manualWattonPrice)) {
@@ -268,12 +253,11 @@ export const NewSimulation: React.FC = () => {
         createdAt: 0, 
         updatedAt: 0,
         reportData: reportConfig,
-        // SAVE OVERRIDES HERE for persistence
         simulationConfig: { 
             strategyId: selectedStrategyId, 
             manualMargin, 
             manualPowerPrice: finalPower,
-            priceOverrides: overrides // Save the manual map
+            priceOverrides: overrides 
         }
     };
   };
@@ -300,17 +284,13 @@ export const NewSimulation: React.FC = () => {
     if (!invoiceData.companyName) return alert("Preencha o nome da empresa.");
     setAnalyzing(true);
     setAnalysisStep("A analisar perfis de consumo e fator de carga...");
-    
     await new Promise(r => setTimeout(r, 800));
     setAnalysisStep(`A analisar estratégia: ${activeStrategy.name}...`);
-    
     const clientForAnalysis = buildClientPayload();
-    // Inject explicitly the strategy name and type to the AI service context
     clientForAnalysis.appliedStrategyName = activeStrategy.name;
 
     try {
         const analysis = await generateExpertAnalysis(clientForAnalysis, activeStrategy.type);
-        
         setAnalysisStep("A gerar estratégia de otimização...");
         await new Promise(r => setTimeout(r, 600));
 
@@ -336,7 +316,6 @@ export const NewSimulation: React.FC = () => {
             reportData: newReportConfig,
             updatedAt: Date.now()
         };
-        
         const id = await saveClient(clientPayload);
         setClientId(id);
         setStep('report');
@@ -357,10 +336,8 @@ export const NewSimulation: React.FC = () => {
   const addRow = () => setExtendedConsumption([...extendedConsumption, { period: 'Novo Período', kwh: 0, currentPriceEur: 0 }]);
   const removeRow = (index: number) => setExtendedConsumption(extendedConsumption.filter((_, i) => i !== index));
 
-
   if (loading) return <div className="min-h-screen flex items-center justify-center text-watton-lime animate-pulse text-xl font-bold">A processar dados e a guardar...</div>;
 
-  // OVERLAY DE ANÁLISE IA
   if (analyzing) {
       return (
           <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-8 backdrop-blur-md">
@@ -371,10 +348,7 @@ export const NewSimulation: React.FC = () => {
               </div>
               <h2 className="text-3xl font-black text-white mb-2 tracking-tight">Watton AI Analyst</h2>
               <p className="text-watton-lime font-mono text-sm animate-pulse">{analysisStep}</p>
-              
-              <div className="mt-8 w-full max-w-md bg-gray-800 rounded-full h-1.5 overflow-hidden">
-                  <div className="h-full bg-watton-lime animate-progress-indeterminate"></div>
-              </div>
+              <div className="mt-8 w-full max-w-md bg-gray-800 rounded-full h-1.5 overflow-hidden"><div className="h-full bg-watton-lime animate-progress-indeterminate"></div></div>
           </div>
       );
   }
@@ -399,31 +373,12 @@ export const NewSimulation: React.FC = () => {
 
   return (
     <div className="space-y-8 pb-20 animate-fade-in">
-      {/* HEADER E TOOLBAR */}
       <div className="flex justify-between items-center border-b border-gray-800 pb-6">
-        <div className="flex items-center gap-3">
-             <h2 className="text-3xl font-bold text-white tracking-tight">Simulador <span className="text-watton-lime">Watton</span></h2>
-        </div>
+        <div className="flex items-center gap-3"><h2 className="text-3xl font-bold text-white tracking-tight">Simulador <span className="text-watton-lime">Watton</span></h2></div>
         <div className="flex items-center gap-4">
-            <button 
-                onClick={() => { if(window.confirm('Reiniciar?')) setStep('upload'); }} 
-                className="h-11 px-4 rounded-xl font-bold text-xs uppercase bg-gray-900/50 text-gray-500 hover:text-red-400 border border-gray-800 hover:border-red-500/50 transition-all flex items-center gap-2"
-            >
-                <span>↺ Reiniciar</span>
-            </button>
-            <button 
-                id="btn-save-progress"
-                onClick={handleSaveProgress} 
-                className="h-11 px-6 rounded-xl font-bold text-xs uppercase bg-gray-900 text-white border border-watton-dark hover:bg-watton-dark transition-all flex items-center gap-2"
-            >
-                <span>💾 Gravar</span>
-            </button>
-            <button 
-                onClick={handleGenerateAnalysis} 
-                className="h-11 px-8 rounded-xl font-bold text-xs uppercase bg-gradient-to-r from-watton-lime to-green-500 text-black hover:scale-105 transition-transform flex items-center gap-2 shadow-lg shadow-green-900/50"
-            >
-                <span className="text-lg">✨</span> Gerar Relatório AI
-            </button>
+            <button onClick={() => { if(window.confirm('Reiniciar?')) setStep('upload'); }} className="h-11 px-4 rounded-xl font-bold text-xs uppercase bg-gray-900/50 text-gray-500 hover:text-red-400 border border-gray-800 hover:border-red-500/50 transition-all flex items-center gap-2"><span>↺ Reiniciar</span></button>
+            <button id="btn-save-progress" onClick={handleSaveProgress} className="h-11 px-6 rounded-xl font-bold text-xs uppercase bg-gray-900 text-white border border-watton-dark hover:bg-watton-dark transition-all flex items-center gap-2"><span>💾 Gravar</span></button>
+            <button onClick={handleGenerateAnalysis} className="h-11 px-8 rounded-xl font-bold text-xs uppercase bg-gradient-to-r from-watton-lime to-green-500 text-black hover:scale-105 transition-transform flex items-center gap-2 shadow-lg shadow-green-900/50"><span className="text-lg">✨</span> Gerar Relatório AI</button>
         </div>
       </div>
 
@@ -437,106 +392,54 @@ export const NewSimulation: React.FC = () => {
                         <input className="w-full bg-black border border-gray-700 rounded p-2 text-white text-sm font-bold focus:border-watton-lime outline-none" value={invoiceData.companyName} onChange={e => setInvoiceData({...invoiceData, companyName: e.target.value})} />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="text-[10px] text-gray-500 font-bold uppercase">NIF</label>
-                            <input className="w-full bg-black border border-gray-700 rounded p-2 text-white text-sm" value={invoiceData.nif} onChange={e => setInvoiceData({...invoiceData, nif: e.target.value})} />
-                        </div>
-                        <div>
-                            <label className="text-[10px] text-gray-500 font-bold uppercase">CPE</label>
-                            <input className="w-full bg-black border border-gray-700 rounded p-2 text-white text-sm" value={invoiceData.cpe} onChange={e => setInvoiceData({...invoiceData, cpe: e.target.value})} />
-                        </div>
+                        <div><label className="text-[10px] text-gray-500 font-bold uppercase">NIF</label><input className="w-full bg-black border border-gray-700 rounded p-2 text-white text-sm" value={invoiceData.nif} onChange={e => setInvoiceData({...invoiceData, nif: e.target.value})} /></div>
+                        <div><label className="text-[10px] text-gray-500 font-bold uppercase">CPE</label><input className="w-full bg-black border border-gray-700 rounded p-2 text-white text-sm" value={invoiceData.cpe} onChange={e => setInvoiceData({...invoiceData, cpe: e.target.value})} /></div>
                     </div>
-                    {/* RESTO DO FORMULARIO */}
                     <div className="border-t border-gray-800 pt-4 grid grid-cols-2 gap-3">
                          <div className="bg-black p-2 rounded border border-gray-700">
                              <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Tensão</label>
-                             <select className="w-full bg-transparent text-white font-bold text-sm outline-none" value={invoiceData.tensionLevel} onChange={e => setInvoiceData({...invoiceData, tensionLevel: e.target.value as any})}>
-                                 {TENSION_LEVELS.map(t => <option key={t} value={t} className="bg-gray-900">{t}</option>)}
-                             </select>
+                             <select className="w-full bg-transparent text-white font-bold text-sm outline-none" value={invoiceData.tensionLevel} onChange={e => setInvoiceData({...invoiceData, tensionLevel: e.target.value as any})}>{TENSION_LEVELS.map(t => <option key={t} value={t} className="bg-gray-900">{t}</option>)}</select>
                          </div>
                          <div className="bg-black p-2 rounded border border-gray-700">
                              <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Ciclo Horário</label>
-                             <select className="w-full bg-transparent text-white font-bold text-sm outline-none" value={invoiceData.cycleType} onChange={e => setInvoiceData({...invoiceData, cycleType: e.target.value as any})}>
-                                 {CYCLES.map(c => <option key={c} value={c} className="bg-gray-900">{c}</option>)}
-                             </select>
+                             <select className="w-full bg-transparent text-white font-bold text-sm outline-none" value={invoiceData.cycleType} onChange={e => setInvoiceData({...invoiceData, cycleType: e.target.value as any})}>{CYCLES.map(c => <option key={c} value={c} className="bg-gray-900">{c}</option>)}</select>
                          </div>
                     </div>
                     <div className="grid grid-cols-3 gap-3 border-t border-gray-800 pt-4">
-                         <div>
-                            <label className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Dias</label>
-                            <input type="number" className="w-full bg-black border border-gray-700 rounded p-1 text-white text-right text-xs" value={invoiceData.daysInPeriod} onChange={e => setInvoiceData({...invoiceData, daysInPeriod: parseFloat(e.target.value)})} />
-                         </div>
-                         <div>
-                            <label className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Potência kW</label>
-                            <input type="number" className="w-full bg-black border border-gray-700 rounded p-1 text-white text-right text-xs" value={invoiceData.contractedPowerKw} onChange={e => setInvoiceData({...invoiceData, contractedPowerKw: parseFloat(e.target.value)})} />
-                         </div>
-                         <div>
-                            <label className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Pot. €/dia</label>
-                            <input type="number" step="0.0001" className="w-full bg-black border border-gray-700 rounded p-1 text-red-400 text-right text-xs font-bold" value={invoiceData.dailyPowerCostEur} onChange={e => setInvoiceData({...invoiceData, dailyPowerCostEur: parseFloat(e.target.value)})} />
-                        </div>
+                         <div><label className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Dias</label><input type="number" className="w-full bg-black border border-gray-700 rounded p-1 text-white text-right text-xs" value={invoiceData.daysInPeriod} onChange={e => setInvoiceData({...invoiceData, daysInPeriod: parseFloat(e.target.value)})} /></div>
+                         <div><label className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Potência kW</label><input type="number" className="w-full bg-black border border-gray-700 rounded p-1 text-white text-right text-xs" value={invoiceData.contractedPowerKw} onChange={e => setInvoiceData({...invoiceData, contractedPowerKw: parseFloat(e.target.value)})} /></div>
+                         <div><label className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Pot. €/dia</label><input type="number" step="0.0001" className="w-full bg-black border border-gray-700 rounded p-1 text-red-400 text-right text-xs font-bold" value={invoiceData.dailyPowerCostEur} onChange={e => setInvoiceData({...invoiceData, dailyPowerCostEur: parseFloat(e.target.value)})} /></div>
                     </div>
                 </div>
             </div>
         </div>
 
-        {/* COLUNA DIREITA */}
         <div className="xl:col-span-8 space-y-6">
             <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl shadow-lg">
                 <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
                     <h3 className="text-watton-lime font-bold text-sm uppercase">⚙️ 2. Estratégia</h3>
-                    <select value={selectedStrategyId} onChange={handleStrategyChange} className="bg-watton-dark text-white font-bold text-sm px-4 py-2 rounded border border-green-700">
-                        {MASTER_STRATEGIES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+                    <select value={selectedStrategyId} onChange={handleStrategyChange} className="bg-watton-dark text-white font-bold text-sm px-4 py-2 rounded border border-green-700">{MASTER_STRATEGIES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
                 </div>
 
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="bg-gray-800/50 p-4 rounded border-l-4 border-watton-lime flex flex-col justify-between">
                             <div className="flex justify-between items-start mb-2">
-                                <div className="text-sm text-gray-300">
-                                    <span className="font-bold text-white block">Energia</span>
-                                    <span className="text-xs">Base: {activeStrategy.basePriceMWh.toFixed(2)} €/MWh</span>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-[10px] text-gray-400 uppercase font-bold">Margem Aplicada</div>
-                                    <div className="text-xl font-mono text-watton-lime font-bold">{result.appliedMarginEurKwh.toFixed(4)} <span className="text-xs">€/kWh</span></div>
-                                </div>
+                                <div className="text-sm text-gray-300"><span className="font-bold text-white block">Energia</span><span className="text-xs">Base: {activeStrategy.basePriceMWh.toFixed(2)} €/MWh</span></div>
+                                <div className="text-right"><div className="text-[10px] text-gray-400 uppercase font-bold">Margem Aplicada</div><div className="text-xl font-mono text-watton-lime font-bold">{result.appliedMarginEurKwh.toFixed(4)} <span className="text-xs">€/kWh</span></div></div>
                             </div>
                         </div>
 
                         <div className="bg-gray-800/50 p-4 rounded border-l-4 border-blue-500 flex flex-col justify-between">
                             <div className="flex justify-between items-center">
-                                <div className="text-sm text-gray-300">
-                                    <span className="font-bold text-white block">Potência</span>
-                                    <span className="text-xs">Base: {activeStrategy.proposalPowerPriceDaily.toFixed(4)} €/dia</span>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-[10px] text-gray-400 uppercase font-bold mb-1">Spread Potência</div>
-                                    <input 
-                                        type="number" 
-                                        step="0.0001" 
-                                        value={powerSpread} 
-                                        onChange={(e) => handleSpreadChange(parseFloat(e.target.value))}
-                                        className="bg-black/50 border border-gray-600 rounded text-right w-24 px-2 py-1 text-blue-400 font-bold font-mono outline-none focus:border-blue-500 focus:bg-gray-900"
-                                    />
-                                </div>
+                                <div className="text-sm text-gray-300"><span className="font-bold text-white block">Potência</span><span className="text-xs">Base: {activeStrategy.proposalPowerPriceDaily.toFixed(4)} €/dia</span></div>
+                                <div className="text-right"><div className="text-[10px] text-gray-400 uppercase font-bold mb-1">Spread Potência</div><input type="number" step="0.0001" value={powerSpread} onChange={(e) => handleSpreadChange(parseFloat(e.target.value))} className="bg-black/50 border border-gray-600 rounded text-right w-24 px-2 py-1 text-blue-400 font-bold font-mono outline-none focus:border-blue-500 focus:bg-gray-900" /></div>
                             </div>
                             <div className="mt-2 text-right border-t border-gray-700 pt-2 flex justify-between items-center">
                                 <span className="text-[10px] uppercase font-bold text-gray-500">Final Proposta</span>
                                 <div className="flex items-center justify-end gap-2">
-                                    {manualPowerPrice !== undefined && (
-                                        <button onClick={resetPowerPrice} className="text-[9px] text-red-400 hover:text-red-300 underline mr-2">
-                                            Reset (Auto)
-                                        </button>
-                                    )}
-                                    <input 
-                                        type="number"
-                                        step="0.0001"
-                                        value={manualPowerPrice !== undefined ? manualPowerPrice : (activeStrategy.proposalPowerPriceDaily + powerSpread)}
-                                        onChange={(e) => handleFinalPowerPriceChange(parseFloat(e.target.value))}
-                                        className={`bg-transparent text-lg font-mono font-bold outline-none w-28 text-right border-b border-transparent hover:border-blue-500 focus:border-blue-500 transition-colors ${manualPowerPrice !== undefined ? 'text-yellow-400' : 'text-blue-400'}`}
-                                        title={manualPowerPrice !== undefined ? "Valor manual definido" : "Valor calculado automaticamente"}
-                                    />
+                                    {manualPowerPrice !== undefined && (<button onClick={resetPowerPrice} className="text-[9px] text-red-400 hover:text-red-300 underline mr-2">Reset (Auto)</button>)}
+                                    <input type="number" step="0.0001" value={manualPowerPrice !== undefined ? manualPowerPrice : (activeStrategy.proposalPowerPriceDaily + powerSpread)} onChange={(e) => handleFinalPowerPriceChange(parseFloat(e.target.value))} className={`bg-transparent text-lg font-mono font-bold outline-none w-28 text-right border-b border-transparent hover:border-blue-500 focus:border-blue-500 transition-colors ${manualPowerPrice !== undefined ? 'text-yellow-400' : 'text-blue-400'}`} title={manualPowerPrice !== undefined ? "Valor manual definido" : "Valor calculado automaticamente"} />
                                     <span className="text-xs text-blue-500 font-bold">€/dia</span>
                                 </div>
                             </div>
@@ -544,51 +447,22 @@ export const NewSimulation: React.FC = () => {
                     </div>
 
                     <div className="bg-black border border-gray-800 rounded-lg overflow-hidden">
-                        <div className="bg-gray-950 px-3 py-2 border-b border-gray-800 text-[10px] text-gray-500 uppercase font-bold flex justify-between">
-                             <span>Comparador Detalhado</span>
-                             <button onClick={addRow} className="text-watton-lime">+ Período</button>
-                        </div>
+                        <div className="bg-gray-950 px-3 py-2 border-b border-gray-800 text-[10px] text-gray-500 uppercase font-bold flex justify-between"><span>Comparador Detalhado</span><button onClick={addRow} className="text-watton-lime">+ Período</button></div>
                         <table className="w-full text-xs text-right">
-                            <thead className="bg-gray-900 text-gray-500">
-                                <tr>
-                                    <th className="p-3 text-left">Período</th>
-                                    <th className="p-3 text-white">kWh</th>
-                                    <th className="p-3 text-red-300">Preço Atual</th>
-                                    <th className="p-3 text-red-300">Total Atual</th>
-                                    <th className="p-3 text-green-300 bg-green-900/10">Preço Watton</th>
-                                    <th className="p-3 text-green-300 bg-green-900/10">Total Watton</th>
-                                    <th className="p-1"></th>
-                                </tr>
-                            </thead>
+                            <thead className="bg-gray-900 text-gray-500"><tr><th className="p-3 text-left">Período</th><th className="p-3 text-white">kWh</th><th className="p-3 text-red-300">Preço Atual</th><th className="p-3 text-red-300">Total Atual</th><th className="p-3 text-green-300 bg-green-900/10">Preço Watton</th><th className="p-3 text-green-300 bg-green-900/10">Total Watton</th><th className="p-1"></th></tr></thead>
                             <tbody className="divide-y divide-gray-800">
                                 {extendedConsumption.map((row, idx) => {
                                     const currentTotal = row.kwh * row.currentPriceEur;
                                     const strategyStat = result.monthlyStats[idx];
                                     const wattonUnit = strategyStat?.wattonUnit || 0;
                                     const wattonTotal = strategyStat?.wattonTotal || 0;
-                                    
                                     return (
                                         <tr key={idx} className="hover:bg-gray-900/50 group">
-                                            <td className="p-3 text-left">
-                                                <input type="text" value={row.period} onChange={e => handleRowChange(idx, 'period', e.target.value)} className="bg-transparent text-gray-300 font-bold outline-none w-full" />
-                                            </td>
-                                            <td className="p-3">
-                                                <input type="number" value={row.kwh} onChange={e => handleRowChange(idx, 'kwh', parseFloat(e.target.value))} className="bg-gray-800 text-right w-20 rounded border border-gray-700 text-white font-bold" />
-                                            </td>
-                                            <td className="p-3">
-                                                <input type="number" step="0.0001" value={row.currentPriceEur} onChange={e => handleRowChange(idx, 'currentPriceEur', parseFloat(e.target.value))} className="bg-gray-800 text-right w-20 rounded border border-gray-700 text-red-400 font-bold" />
-                                            </td>
+                                            <td className="p-3 text-left"><input type="text" value={row.period} onChange={e => handleRowChange(idx, 'period', e.target.value)} className="bg-transparent text-gray-300 font-bold outline-none w-full" /></td>
+                                            <td className="p-3"><input type="number" value={row.kwh} onChange={e => handleRowChange(idx, 'kwh', parseFloat(e.target.value))} className="bg-gray-800 text-right w-20 rounded border border-gray-700 text-white font-bold" /></td>
+                                            <td className="p-3"><input type="number" step="0.0001" value={row.currentPriceEur} onChange={e => handleRowChange(idx, 'currentPriceEur', parseFloat(e.target.value))} className="bg-gray-800 text-right w-20 rounded border border-gray-700 text-red-400 font-bold" /></td>
                                             <td className="p-3 text-red-400 font-bold opacity-70">{currentTotal.toFixed(2)} €</td>
-                                            
-                                            <td className="p-3 bg-green-900/10">
-                                                <input 
-                                                    type="number" step="0.0001"
-                                                    value={row.manualWattonPrice !== undefined ? row.manualWattonPrice : wattonUnit} 
-                                                    onChange={e => handleRowChange(idx, 'manualWattonPrice', parseFloat(e.target.value))}
-                                                    placeholder={wattonUnit.toFixed(4)}
-                                                    className="bg-gray-800 text-right w-20 rounded border border-green-700 text-watton-lime font-bold shadow-sm shadow-green-900/20"
-                                                />
-                                            </td>
+                                            <td className="p-3 bg-green-900/10"><input type="number" step="0.0001" value={row.manualWattonPrice !== undefined ? row.manualWattonPrice : wattonUnit} onChange={e => handleRowChange(idx, 'manualWattonPrice', parseFloat(e.target.value))} placeholder={wattonUnit.toFixed(4)} className="bg-gray-800 text-right w-20 rounded border border-green-700 text-watton-lime font-bold shadow-sm shadow-green-900/20" /></td>
                                             <td className="p-3 bg-green-900/10 text-watton-lime font-bold">{wattonTotal.toFixed(2)} €</td>
                                             <td className="p-1 text-center"><button onClick={() => removeRow(idx)} className="text-gray-600 hover:text-red-500">×</button></td>
                                         </tr>
@@ -609,14 +483,19 @@ export const NewSimulation: React.FC = () => {
                 </div>
             </div>
 
-            {/* PART 3 */}
             <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl shadow-lg mt-8 border-t-4 border-t-white">
                 <h3 className="text-white font-bold mb-6 text-sm uppercase flex items-center gap-2">🏁 3. Conclusão da Simulação</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* ... (Resumos Totais mantidos igual) ... */}
                     <div className="bg-black/40 rounded-lg p-4 border border-gray-800">
                         <div className="text-[10px] text-gray-500 uppercase font-bold mb-3 tracking-widest">Comparativo Mensal</div>
                         <div className="space-y-3">
+                             <div className="flex justify-between items-center pt-1 border-b border-gray-800 pb-1">
+                                 <span className="text-gray-500 font-bold uppercase text-[9px]">Custo Potência Total</span>
+                                 <div className="flex gap-3 text-xs">
+                                     <span className="text-red-400 font-bold">{result.monthlyTotals?.currentPower.toFixed(2)} €</span>
+                                     <span className="text-blue-400 font-black">{result.monthlyTotals?.wattonPower.toFixed(2)} €</span>
+                                 </div>
+                             </div>
                              <div className="flex justify-between items-center pt-1">
                                  <span className="text-white font-bold uppercase text-[10px]">Total Fatura</span>
                                  <div className="flex gap-3 text-sm">
@@ -626,7 +505,6 @@ export const NewSimulation: React.FC = () => {
                              </div>
                         </div>
                     </div>
-                    {/* ... */}
                 </div>
             </div>
         </div>
