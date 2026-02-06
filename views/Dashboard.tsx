@@ -87,9 +87,19 @@ export const Dashboard: React.FC = () => {
                 <span className="text-[10px] font-bold text-watton-lime uppercase tracking-[0.2em]">Live Market Data</span>
             </div>
             <h2 className="text-5xl font-black text-white tracking-tighter leading-none">Market<span className="text-transparent bg-clip-text bg-gradient-to-r from-watton-lime to-green-600">Pulse</span></h2>
-            <p className="text-sm text-gray-400 font-medium tracking-wide mt-2 max-w-lg">
-                Visão estratégica do mercado OMIP e gestão integrada de portfólio de energia.
-            </p>
+            <div className="flex flex-col gap-2 mt-2">
+                <p className="text-sm text-gray-400 font-medium tracking-wide max-w-lg">
+                    Visão estratégica do mercado OMIP e gestão integrada de portfólio de energia.
+                </p>
+                {marketData?.marketInsight && (
+                    <div className="bg-watton-lime/10 border-l-4 border-watton-lime px-4 py-2 rounded-r-lg max-w-2xl animate-fade-in">
+                        <p className="text-watton-lime text-xs font-bold italic">
+                            <span className="mr-2">✨ IA Insight:</span>
+                            {marketData.marketInsight}
+                        </p>
+                    </div>
+                )}
+            </div>
         </div>
         
         {/* BUTTON: Clean & Minimalist Premium */}

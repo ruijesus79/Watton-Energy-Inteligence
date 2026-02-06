@@ -12,27 +12,24 @@ const ANALYSIS_SCHEMA = {
     strategyText: { type: Type.STRING, description: "Estratégia Watton: Explicação técnica da solução (Fixo ou Hedging)." },
     efficiencyStrategy: { type: Type.STRING, description: "Otimização Operacional: Sugestões práticas para reduzir consumo na Ponta." },
     insightText: { type: Type.STRING, description: "Conclusão Executiva: O 'Elevator Pitch' final baseado na poupança anual." },
+    visionText: { type: Type.STRING, description: "Visão de Mercado: Contexto atual do OMIP e tendências." },
+    regulatoryText: { type: Type.STRING, description: "Aconselhamento Regulatório: Impacto de taxas e diretivas ESG/CSRD." },
+    riskAnalysisText: { type: Type.STRING, description: "Análise de Risco Detalhada: Volatilidade e proteção." },
     vulnerabilityScore: { type: Type.STRING }
-  }
+  },
+  required: ["diagnosisPriceText", "diagnosisOppText", "strategyText", "efficiencyStrategy", "insightText", "visionText", "regulatoryText", "riskAnalysisText", "vulnerabilityScore"]
 };
 
 export const generateExpertAnalysis = async (client: ClientData, strategyType: 'HEDGING' | 'FIXED' = 'FIXED') => {
   try {
     const monthlyStats = client.monthlyStats || [];
     const totalKwh = monthlyStats.reduce((acc, s) => acc + s.kwh, 0) || 1;
-    
-    // Análise Granular por Período
     const ponta = monthlyStats.find(s => s.period.toLowerCase().includes('ponta'));
-    
     const pontaKwh = ponta?.kwh || 0;
-    const pontaPriceDiff = (ponta?.currentUnit || 0) - (ponta?.wattonUnit || 0);
-    const pontaSavings = pontaKwh * pontaPriceDiff;
-    
     const annualSavings = client.annualSavingsEur || 0;
     const savingsPct = client.annualSavingsPercent || 0;
     const strategyName = client.appliedStrategyName || 'Proposta Personalizada';
 
-    // Cálculo Algorítmico do Score (Quanto maior a poupança, mais vulnerável estava o cliente)
     let score = 5;
     if (savingsPct > 30) score = 10;
     else if (savingsPct > 20) score = 8;
@@ -40,49 +37,65 @@ export const generateExpertAnalysis = async (client: ClientData, strategyType: '
     else score = 4;
 
     const contextMetrics = `
-      DADOS TÉCNICOS DA FATURA (EMPRESA: ${client.companyName}):
-      - Consumo Total: ${totalKwh.toLocaleString()} kWh
-      - Consumo em Ponta (Crítico): ${pontaKwh.toLocaleString()} kWh.
-      - Diferencial de Preço na Ponta: O cliente paga ${(ponta?.currentUnit || 0).toFixed(4)}€/kWh. A Watton propõe ${(ponta?.wattonUnit || 0).toFixed(4)}€/kWh.
-      - Poupança só na Ponta: ~${pontaSavings.toFixed(0)}€.
-      - Poupança Anual Total: ${annualSavings.toLocaleString('pt-PT', {style: 'currency', currency: 'EUR'})} (${savingsPct.toFixed(1)}%).
-      - Estratégia Proposta SELECIONADA: "${strategyName}" (TIPO: ${strategyType}).
+      DADOS TÉCNICOS (EMPRESA: ${client.companyName}):
+      - Consumo Total: ${totalKwh.toLocaleString()} kWh.
+      - Consumo em Ponta: ${pontaKwh.toLocaleString()} kWh.
+      - Poupança Anual: ${annualSavings.toLocaleString('pt-PT', {style: 'currency', currency: 'EUR'})} (${savingsPct.toFixed(1)}%).
+      - Estratégia: "${strategyName}" (TIPO: ${strategyType}).
     `;
 
-    const prompt = `
-      ATUA COMO UM ANALISTA FINANCEIRO DE ELITE E ESPECIALISTA EM MERCADOS DE ENERGIA (OMIP/MIBEL). IQ 300.
-      O teu objetivo é criar um relatório de vulnerabilidade irrefutável para o cliente.
-
-      Escreve em Português de Portugal (PT-PT), tom corporativo, direto e persuasivo.
-
-      REGRAS CRÍTICAS DE ESTRATÉGIA:
-      1. Se o TIPO for 'FIXED', NUNCA fales em "Indexado gerido", "Hedging", "Watton Móvil" ou "Híbrido". Fala em "Estabilidade Total", "Orçamento Fechado" e "Preço Fixo Garantido". Usa estritamente o nome "${strategyName}".
-      2. Se o TIPO for 'HEDGING', explica o benefício de bloquear o preço nas horas caras e aproveitar o mercado nas horas baratas.
-      3. NÃO ALUCINES Nomes de Produtos. Usa apenas "${strategyName}".
-
-      SECÇÕES A GERAR:
-
-      1. DIAGNÓSTICO PREÇO (diagnosisPriceText):
-         - Analisa o "Spread" excessivo que o cliente paga atualmente.
-         - Se poupança for negativa (prejuízo), explica que o cliente já tem um bom contrato mas a Watton oferece melhor serviço. Se positiva, destrói o preço atual.
-
-      2. ANÁLISE DE RISCO (diagnosisOppText):
-         - Explica o risco de manter o contrato atual versus a segurança da solução Watton.
-
-      3. ESTRATÉGIA IMPLEMENTADA (strategyText):
-         - Explica a solução "${strategyName}" baseada no TIPO ${strategyType}.
-         - Sê técnico sobre como este produto específico resolve o problema do cliente.
-
-      4. OTIMIZAÇÃO (efficiencyStrategy):
-         - Dá 2 exemplos práticos para reduzir consumo.
-
-      5. INSIGHT FINAL (insightText):
-         - Uma frase de fecho poderosa baseada no valor anual de ${annualSavings.toFixed(0)}€.
+    // AGENTE 1: ANALISTA DE MERCADO (GERADOR)
+    const genPrompt = `
+      ATUA COMO ANALISTA DE MERCADO SÉNIOR. Gera uma análise inicial de vulnerabilidade energética.
+      Regras: PT-PT, tom persuasivo, foca no diferencial de preço e risco de mercado.
+      Estratégia: ${strategyName}.
+      ${contextMetrics}
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: { parts: [{ text: contextMetrics + "\n\n" + prompt }] },
+    const genResponse = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [{ parts: [{ text: genPrompt }] }],
+      config: { temperature: 0.7 }
+    });
+
+    const initialDraft = genResponse.text;
+
+    // AGENTE 2: CRÍTICO ESTRATÉGICO (REVISOR)
+    const criticPrompt = `
+      ATUA COMO UM CRÍTICO FINANCEIRO IMPLACÁVEL.
+      Analisa este rascunho de relatório e identifica onde ele falha em ser "irrefutável".
+      Rascunho: "${initialDraft}"
+      Contexto: ${contextMetrics}
+      Sugere melhorias técnicas e de copy para maximizar o impacto psicológico da poupança de ${annualSavings.toFixed(0)}€.
+    `;
+
+    const criticResponse = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [{ parts: [{ text: criticPrompt }] }],
+      config: { temperature: 0.3 }
+    });
+
+    const critique = criticResponse.text;
+
+    // AGENTE 3: SINTETIZADOR EXECUTIVO (FINALIZADOR)
+    const synthPrompt = `
+      CONSOLIDA A ANÁLISE FINAL. Atua como o Diretor Geral da Watton Energy.
+      Usa o rascunho inicial e a crítica para gerar o JSON final perfeito para o relatório de vulnerabilidade.
+
+      Rascunho: ${initialDraft}
+      Crítica: ${critique}
+      Contexto: ${contextMetrics}
+
+      REGRAS CRÍTICAS:
+      1. Se TIPO='FIXED', fala em "Estabilidade Total", NUNCA em indexado ou variável.
+      2. Se TIPO='HEDGING', explica o benefício de proteção contra volatilidade vs oportunidade de mercado.
+      3. Sê extremamente persuasivo sobre a poupança anual de ${annualSavings.toFixed(0)}€.
+      4. JSON output deve seguir rigorosamente o schema fornecido.
+    `;
+
+    const finalResponse = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [{ parts: [{ text: synthPrompt }] }],
       config: {
         responseMimeType: "application/json",
         responseSchema: ANALYSIS_SCHEMA,
@@ -90,24 +103,22 @@ export const generateExpertAnalysis = async (client: ClientData, strategyType: '
       }
     });
 
-    const text = response.text;
-    if (!text) throw new Error("No analysis generated");
-    
-    const result = JSON.parse(text);
-    // Force the calculated score
+    const result = JSON.parse(finalResponse.text);
     result.vulnerabilityScore = score.toString();
     
     return result;
 
   } catch (error) {
     console.error("AI Analysis Error:", error);
-    // Fallback Inteligente
     return {
-        diagnosisPriceText: "Identificámos um spread excessivo no preço de energia ativa, especificamente no período de Ponta, onde a tarifa atual penaliza o perfil de consumo da empresa.",
-        diagnosisOppText: "A estrutura atual expõe a tesouraria à volatilidade. A proposta Watton mitiga este risco.",
-        strategyText: `Implementação da estratégia ${client.appliedStrategyName || 'Watton Energy'} para garantir competitividade e redução de custos operacionais.`,
-        efficiencyStrategy: "Sugerimos análise técnica para deslocação de cargas térmicas ou processos industriais intensivos para o período 'Vazio'.",
-        insightText: `A inércia contratual está a custar ${client.annualSavingsEur?.toFixed(0)}€ por ano. A Proposta Watton corrige imediatamente esta ineficiência.`,
+        diagnosisPriceText: "Identificámos um spread excessivo no preço de energia ativa, penalizando o perfil de consumo da empresa.",
+        diagnosisOppText: "A estrutura atual expõe a tesouraria à volatilidade desnecessária.",
+        strategyText: `Implementação da estratégia ${client.appliedStrategyName || 'Watton Energy'} para garantir competitividade.`,
+        efficiencyStrategy: "Sugerimos análise técnica para deslocação de cargas térmicas para o período 'Vazio'.",
+        insightText: `A inércia contratual custa ${client.annualSavingsEur?.toFixed(0)}€/ano.`,
+        visionText: "Mercado OMIP com volatilidade elevada devido ao contexto geopolítico.",
+        regulatoryText: "Necessidade de adaptação às novas diretrizes de reporte de sustentabilidade (CSRD).",
+        riskAnalysisText: "Risco de subida de preços no mercado spot durante picos de inverno.",
         vulnerabilityScore: client.annualSavingsPercent && client.annualSavingsPercent > 20 ? "8" : "6"
     };
   }
