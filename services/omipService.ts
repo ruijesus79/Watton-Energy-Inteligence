@@ -1,4 +1,8 @@
 
+import { GoogleGenAI } from "@google/genai";
+
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
 export interface OmipDataPoint {
   timestamp: string; // Used for X-Axis (Date)
   value: number;     // Price
@@ -13,6 +17,7 @@ export interface OmipDashboardData {
         trend: 'up' | 'down' | 'stable';
     }[];
     chartData: OmipDataPoint[];
+    marketInsight?: string;
     lastUpdate: string;
 }
 
@@ -21,10 +26,10 @@ const TARGET_URL = "https://www.omip.pt/pt/dados-mercado/futuros/eletricidade-di
 
 // CACHE SYSTEM
 let omipCache: { data: OmipDashboardData; timestamp: number } | null = null;
-const CACHE_TTL = 5 * 60 * 1000; // 5 Minutes
+const CACHE_TTL = 30 * 60 * 1000; // 30 Minutes
 
-// ANCHOR DATE: 14 Dec 2025
-const ANCHOR_DATE = new Date('2025-12-14T12:00:00Z');
+// ANCHOR DATE: Now
+const ANCHOR_DATE = new Date();
 
 // Helper to parse PT/ES number formats
 const parsePrice = (str: string): number | null => {
@@ -113,11 +118,54 @@ const getFallbackData = (): OmipDashboardData => {
 export const fetchOmipData = async (): Promise<{ data: OmipDashboardData, isFallback: boolean }> => {
   // Check Cache
   if (omipCache && (Date.now() - omipCache.timestamp < CACHE_TTL)) {
-      return { data: omipCache.data, isFallback: true }; // Always return fallback/simulation for this scenario
+      return { data: omipCache.data, isFallback: false };
   }
 
-  // FORCE FALLBACK TO SIMULATE 2025 DATE
-  const data = getFallbackData();
-  omipCache = { data, timestamp: Date.now() };
-  return { data, isFallback: true };
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [{ parts: [{ text: `
+        Obtém os preços de fecho mais recentes do mercado de futuros de eletricidade OMIP (Portugal) e o preço spot OMIE.
+        Procura especificamente pelos seguintes produtos:
+        1. OMIE Spot PT (Preço diário mais recente)
+        2. Futuro Mensal (Próximo mês)
+        3. Futuro Trimestral (Próximo trimestre)
+        4. Futuro Anual (Próximo ano completo - YR-26 se disponível)
+
+        Retorna os dados no formato JSON seguindo este esquema:
+        {
+          "tableData": [
+            { "label": string, "price": number, "change": number, "trend": "up" | "down" | "stable" }
+          ],
+          "spotPrice": number,
+          "marketInsight": string (uma frase curta e impactante sobre o estado atual do mercado para decisores)
+        }
+      ` }] }],
+      // @ts-ignore
+      tools: [{ googleSearchRetrieval: {} }],
+      config: {
+        responseMimeType: "application/json",
+        temperature: 0
+      }
+    });
+
+    const result = JSON.parse(response.text);
+    const spotPrice = result.spotPrice || 60.0;
+
+    const data: OmipDashboardData = {
+        tableData: result.tableData,
+        chartData: generateHistory(spotPrice),
+        marketInsight: result.marketInsight,
+        lastUpdate: new Date().toISOString()
+    };
+
+    omipCache = { data, timestamp: Date.now() };
+    return { data, isFallback: false };
+
+  } catch (error) {
+    console.error("Grounding Error:", error);
+    const data = getFallbackData();
+    omipCache = { data, timestamp: Date.now() };
+    return { data, isFallback: true };
+  }
 };

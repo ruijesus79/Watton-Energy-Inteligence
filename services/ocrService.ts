@@ -103,7 +103,7 @@ export const parseInvoice = async (base64Image: string, mimeType: string): Promi
     `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.0-flash',
       contents: {
         parts: [
           { inlineData: { mimeType, data: base64Image } },
